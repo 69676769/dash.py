@@ -1,4 +1,3 @@
-cat > dash.py << 'EOF'
 # -*- coding: utf-8 -*-
 import sys
 import time
@@ -32,7 +31,6 @@ def banner():
     console.print(Align.center("[dim]real telegram checker // v1.0[/dim]\n"))
 
 def check_username(username):
-    """Реальная проверка через публичный веб-интерфейс t.me"""
     username = username.lstrip("@").strip()
     url = f"https://t.me/{username}"
     result = {
@@ -50,22 +48,18 @@ def check_username(username):
         if r.status_code == 200:
             soup = BeautifulSoup(r.text, "html.parser")
 
-            # Заголовок страницы
             title_tag = soup.find("meta", property="og:title")
             if title_tag and title_tag.get("content"):
                 result["title"] = title_tag["content"].strip()
 
-            # Описание
             desc_tag = soup.find("meta", property="og:description")
             if desc_tag and desc_tag.get("content"):
                 result["description"] = desc_tag["content"].strip()
 
-            # Аватар
             img_tag = soup.find("meta", property="og:image")
             if img_tag and img_tag.get("content"):
                 result["photo"] = img_tag["content"].strip()
 
-            # Определяем тип
             if "tgme_page_extra" in r.text:
                 result["exists"] = True
                 if "subscribers" in r.text or "підписників" in r.text or "подписчиков" in r.text:
@@ -75,7 +69,6 @@ def check_username(username):
                 else:
                     result["type"] = "пользователь"
 
-            # Ищем bio
             bio_div = soup.find("div", class_="tgme_page_description")
             if bio_div:
                 result["description"] = bio_div.get_text(separator=" ", strip=True)
@@ -156,4 +149,3 @@ if __name__ == "__main__":
         main()
     except KeyboardInterrupt:
         console.print("\n[dim]Прервано.[/dim]")
-EOF
