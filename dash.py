@@ -3,211 +3,202 @@ import sys
 import os
 import time
 import json
+import random
+import hashlib
 import subprocess
-import requests
 from datetime import datetime
-from bs4 import BeautifulSoup
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 from rich.align import Align
-from rich.prompt import Prompt, Confirm
+from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn, TimeElapsedColumn
+from rich.prompt import Prompt
 from rich import box
 
 console = Console()
 
+# ============ НАСТРОЙКИ АВТООБНОВЛЕНИЯ ============
+RAW_URL = "https://raw.githubusercontent.com/69676769/dash.py/main/dash.py"
+LOCAL_FILE = os.path.expanduser("~/dash.py")
+VERSION = "1.0"
+
 BANNER = r"""
-  ██████╗ ███████╗██╗███╗   ██╗████████╗
-  ██╔═══██╗██╔════╝██║████╗  ██║╚══██╔══╝
-  ██║   ██║███████╗██║██╔██╗ ██║   ██║   
-  ██║   ██║╚════██║██║██║╚██╗██║   ██║   
-  ╚██████╔╝███████║██║██║ ╚████║   ██║   
-   ╚═════╝ ╚══════╝╚═╝╚═╝  ╚═══╝   ╚═╝   
+  ███████╗███╗   ██╗ ██████╗ ███████╗███████╗██████╗ 
+  ██╔════╝████╗  ██║██╔═══██╗██╔════╝██╔════╝██╔══██╗
+  ███████╗██╔██╗ ██║██║   ██║███████╗█████╗  ██████╔╝
+  ╚════██║██║╚██╗██║██║   ██║╚════██║██╔══╝  ██╔══██╗
+  ███████║██║ ╚████║╚██████╔╝███████║███████╗██║  ██║
+  ╚══════╝╚═╝  ╚═══╝ ╚═════╝ ╚══════╝╚══════╝╚═╝  ╚═╝
 """
-
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) "
-                  "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
-}
-
-REPORT_DIR = os.path.expanduser("~/osint_reports")
 
 
 def banner():
     console.clear()
-    console.print(Align.center(Panel(Text(BANNER, style="bold green"), border_style="green", box=box.DOUBLE)))
-    console.print(Align.center("[dim]OSINT Dashboard // v1.0 // iSH Edition[/dim]\n"))
+    console.print(Align.center(Panel(Text(BANNER, style="bold red"), border_style="red", box=box.DOUBLE)))
+    console.print(Align.center(f"[dim]SNOSER DASHBOARD // v{VERSION} // iSH Edition[/dim]\n"))
 
 
-def check_telegram(username):
-    username = username.lstrip("@").strip()
-    url = f"https://t.me/{username}"
-    result = {
-        "username": username,
-        "exists": False,
-        "title": None,
-        "description": None,
-        "photo": None,
-        "type": "неизвестно",
-        "url": url,
-        "checked_at": datetime.now().isoformat(),
+def auto_update():
+    console.print("[dim]Проверяю обновления с GitHub...[/dim]")
+    try:
+        r = subprocess.run(
+            ["busybox", "wget", "-q", "-O", "-", RAW_URL],
+            capture_output=True, timeout=30
+        )
+        if r.returncode != 0:
+            console.print("[yellow]Не удалось проверить обновления. Продолжаю с локальной версией.[/yellow]\n")
+            return
+
+        remote_code = r.stdout.decode("utf-8", errors="ignore")
+
+        if not os.path.exists(LOCAL_FILE):
+            console.print("[yellow]Локальный файл не найден.[/yellow]\n")
+            return
+
+        with open(LOCAL_FILE, "r", encoding="utf-8") as f:
+            local_code = f.read()
+
+        remote_hash = hashlib.md5(remote_code.encode()).hexdigest()
+        local_hash = hashlib.md5(local_code.encode()).hexdigest()
+
+        if remote_hash != local_hash:
+            console.print("[green]✓ Найдена новая версия. Обновляю...[/green]")
+            with open(LOCAL_FILE, "w", encoding="utf-8") as f:
+                f.write(remote_code)
+            console.print("[green]✓ Обновлено. Перезапусти скрипт.[/green]\n")
+            sys.exit(0)
+        else:
+            console.print("[green]✓ Версия актуальна.[/green]\n")
+
+    except Exception as e:
+        console.print(f"[yellow]Ошибка автообновления: {e}[/yellow]\n")
+
+
+def fake_snos(username, threads=10, count=100):
+    """Визуальная имитация процесса сноса."""
+    stats = {
+        "target": f"@{username}",
+        "threads": threads,
+        "total": count,
+        "sent": 0,
+        "success": 0,
+        "failed": 0,
+        "started": datetime.now().strftime("%H:%M:%S"),
     }
 
-    try:
-        r = requests.get(url, headers=HEADERS, timeout=15)
-        if r.status_code == 200:
-            soup = BeautifulSoup(r.text, "html.parser")
+    console.print(Panel(
+        f"[bold red]ЦЕЛЬ:[/bold red] {stats['target']}\n"
+        f"[bold]Потоков:[/bold] {threads}\n"
+        f"[bold]Всего жалоб:[/bold] {count}\n"
+        f"[bold]Старт:[/bold] {stats['started']}",
+        title="[bold red]ЗАПУСК СНОСА[/bold red]",
+        border_style="red",
+        box=box.DOUBLE
+    ))
+    console.print()
 
-            title_tag = soup.find("meta", property="og:title")
-            if title_tag and title_tag.get("content"):
-                result["title"] = title_tag["content"].strip()
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(bar_width=40),
+        TextColumn("{task.percentage:>3.0f}%"),
+        TimeElapsedColumn(),
+        console=console
+    ) as progress:
+        task = progress.add_task("[red]Отправка жалоб...", total=count)
 
-            desc_tag = soup.find("meta", property="og:description")
-            if desc_tag and desc_tag.get("content"):
-                result["description"] = desc_tag["content"].strip()
+        for i in range(count):
+            time.sleep(random.uniform(0.03, 0.12))
+            stats["sent"] += 1
 
-            img_tag = soup.find("meta", property="og:image")
-            if img_tag and img_tag.get("content"):
-                result["photo"] = img_tag["content"].strip()
+            if random.random() > 0.85:
+                stats["success"] += 1
+                color = "green"
+                mark = "✓"
+            else:
+                stats["failed"] += 1
+                color = "red"
+                mark = "✗"
 
-            if "tgme_page_extra" in r.text:
-                result["exists"] = True
-                if "subscribers" in r.text or "підписників" in r.text or "подписчиков" in r.text:
-                    result["type"] = "канал/группа"
-                elif "last seen" in r.text.lower() or "був" in r.text.lower() or "был" in r.text.lower():
-                    result["type"] = "пользователь"
-                else:
-                    result["type"] = "пользователь"
+            progress.update(
+                task,
+                advance=1,
+                description=f"[red]Жалоба {stats['sent']}/{count} [{color}]{mark}[/{color}]"
+            )
 
-            bio_div = soup.find("div", class_="tgme_page_description")
-            if bio_div:
-                result["description"] = bio_div.get_text(separator=" ", strip=True)
+    console.print()
 
-        elif r.status_code == 404:
-            result["exists"] = False
+    result_table = Table(show_header=False, box=box.ROUNDED, border_style="red", padding=(0, 2))
+    result_table.add_column("k", style="dim white")
+    result_table.add_column("v", style="bold")
 
-    except requests.exceptions.Timeout:
-        result["error"] = "timeout"
-    except requests.exceptions.ConnectionError:
-        result["error"] = "нет соединения"
-    except Exception as e:
-        result["error"] = str(e)
+    result_table.add_row("Цель", f"[cyan]{stats['target']}[/cyan]")
+    result_table.add_row("Отправлено", str(stats["total"]))
+    result_table.add_row("Успех", f"[green]{stats['success']}[/green]")
+    result_table.add_row("Провал", f"[red]{stats['failed']}[/red]")
+    result_table.add_row("Эффективность", f"[yellow]{round(stats['success']/stats['total']*100, 1)}%[/yellow]")
+    result_table.add_row("Статус", "[red]СНОС ЗАВЕРШЁН[/red]")
 
-    return result
+    console.print(Panel(result_table, title="[bold red]РЕЗУЛЬТАТ[/bold red]", border_style="red", box=box.DOUBLE))
 
-
-def render_telegram(data):
-    if "error" in data:
-        console.print(Panel(f"[red]Ошибка: {data['error']}[/red]", border_style="red"))
-        return
-
-    if not data["exists"]:
-        console.print(Panel(
-            f"[bold red]✗ НЕ НАЙДЕН[/bold red]\n\n"
-            f"[white]Username:[/white] [cyan]@{data['username']}[/cyan]\n"
-            f"[white]URL:[/white] {data['url']}",
-            title="[red]TELEGRAM[/red]",
-            border_style="red",
-            box=box.DOUBLE
-        ))
-        return
-
-    table = Table(show_header=False, box=box.ROUNDED, border_style="green", padding=(0, 2))
-    table.add_column("k", style="dim white", no_wrap=True)
-    table.add_column("v", style="bold")
-
-    table.add_row("Статус", "[green]✓ СУЩЕСТВУЕТ[/green]")
-    table.add_row("Юзернейм", f"[cyan]@{data['username']}[/cyan]")
-    table.add_row("Тип", f"[yellow]{data['type']}[/yellow]")
-    if data["title"]:
-        table.add_row("Имя", data["title"])
-    if data["description"]:
-        desc = data["description"][:200] + ("..." if len(data["description"]) > 200 else "")
-        table.add_row("Описание", desc)
-    if data["photo"]:
-        table.add_row("Аватар", f"[link={data['photo']}]открыть[/link]")
-    table.add_row("URL", f"[link={data['url']}]{data['url']}[/link]")
-
-    console.print(Panel(table, title="[bold green]TELEGRAM[/bold green]", border_style="green", box=box.DOUBLE))
-
-
-def run_sherlock(username):
-    sherlock_path = os.path.expanduser("~/sherlock/sherlock/sherlock.py")
-    if not os.path.exists(sherlock_path):
-        console.print("[red]Sherlock не найден в ~/sherlock/sherlock/sherlock.py[/red]")
-        return None
-
-    console.print(f"\n[cyan]Запускаю Sherlock для @{username}...[/cyan]\n")
-    try:
-        proc = subprocess.run(
-            ["python3", sherlock_path, username, "--local"],
-            capture_output=True, text=True, timeout=300
-        )
-        return proc.stdout
-    except Exception as e:
-        console.print(f"[red]Ошибка запуска Sherlock: {e}[/red]")
-        return None
-
-
-def save_report(username, tg_data, sherlock_data):
-    os.makedirs(REPORT_DIR, exist_ok=True)
-    filename = f"{REPORT_DIR}/{username}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
-
-    with open(filename, "w", encoding="utf-8") as f:
-        f.write(f"OSINT REPORT for @{username}\n")
-        f.write(f"Generated: {datetime.now().isoformat()}\n")
-        f.write("=" * 60 + "\n\n")
-        f.write("--- TELEGRAM ---\n")
-        f.write(json.dumps(tg_data, ensure_ascii=False, indent=2))
-        f.write("\n\n--- SHERLOCK ---\n")
-        if sherlock_data:
-            f.write(sherlock_data)
-        else:
-            f.write("(not run)\n")
-
-    console.print(f"\n[green]✓ Отчёт сохранён:[/green] {filename}")
+    # Сохранение лога
+    os.makedirs(os.path.expanduser("~/snos_logs"), exist_ok=True)
+    log_path = os.path.expanduser(f"~/snos_logs/{username}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json")
+    with open(log_path, "w", encoding="utf-8") as f:
+        json.dump(stats, f, ensure_ascii=False, indent=2)
+    console.print(f"\n[dim]Лог сохранён: {log_path}[/dim]")
 
 
 def menu():
-    console.print("\n[bold cyan]═══ МЕНЮ ═══[/bold cyan]")
-    console.print("[1] Проверить Telegram-юзер")
-    console.print("[2] Прогнать Sherlock (поиск по 400+ сайтам)")
-    console.print("[3] Полный отчёт (Telegram + Sherlock) → сохранить в файл")
+    console.print("\n[bold red]═══ ГЛАВНОЕ МЕНЮ ═══[/bold red]")
+    console.print("[1] [red]СНОС[/red] — запустить процесс")
+    console.print("[2] Показать логи")
+    console.print("[3] Проверить обновления")
     console.print("[4] Выход\n")
+
+
+def show_logs():
+    log_dir = os.path.expanduser("~/snos_logs")
+    if not os.path.exists(log_dir):
+        console.print("[yellow]Логов пока нет.[/yellow]")
+        return
+    files = sorted(os.listdir(log_dir))
+    if not files:
+        console.print("[yellow]Логов нет.[/yellow]")
+        return
+    for f in files[-10:]:
+        console.print(f"[dim]{f}[/dim]")
 
 
 def main():
     banner()
+    auto_update()
 
-    if len(sys.argv) > 1:
-        username = sys.argv[1].lstrip("@").strip()
-    else:
-        username = Prompt.ask("[bold cyan]Введи юзернейм (без @)[/bold cyan]").lstrip("@").strip()
-
-    if not username:
-        console.print("[red]Пустой ввод.[/red]")
-        return
-
-    console.print(f"\n[cyan]Проверяю @{username}...[/cyan]\n")
-    tg_data = check_telegram(username)
-    render_telegram(tg_data)
+    target = None
 
     while True:
+        if target is None:
+            target = Prompt.ask("[bold cyan]Введи юзернейм цели (без @)[/bold cyan]").lstrip("@").strip()
+            if not target:
+                continue
+
         menu()
         choice = Prompt.ask("[bold yellow]Выбор[/bold yellow]", choices=["1", "2", "3", "4"])
 
         if choice == "1":
-            render_telegram(tg_data)
+            threads = Prompt.ask("[cyan]Потоков[/cyan]", default="10")
+            count = Prompt.ask("[cyan]Всего жалоб[/cyan]", default="100")
+            try:
+                fake_snos(target, int(threads), int(count))
+            except ValueError:
+                console.print("[red]Неверное число.[/red]")
 
         elif choice == "2":
-            out = run_sherlock(username)
-            if out:
-                console.print(Panel(out, title="[bold green]SHERLOCK[/bold green]", border_style="green"))
+            show_logs()
 
         elif choice == "3":
-            sh = run_sherlock(username)
-            save_report(username, tg_data, sh)
+            auto_update()
 
         elif choice == "4":
             console.print("[dim]Выход.[/dim]")
